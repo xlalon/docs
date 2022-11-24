@@ -5,7 +5,8 @@
 
 ## 重载，优雅重载
 
-### 暴力重载
+### 重载模式一： 暴力停止实例，启动实例。
+
 ```shell
 Brutally killing worker 2 (pid: 17245)...
 Brutally killing worker 1 (pid: 17244)...
@@ -17,11 +18,10 @@ spawned uWSGI worker 2 (pid: 9450, cores: 100)
 ```
 
 问题:
+1. 两个阶段之间的时间片将给你的客户带来粗鲁的无服务。
+2. 强行断开正在执行的请求潜在破坏数据完整性。
 
-    1. 如果你把重载当成“停止实例，启动实例”，那么这两个阶段之间的时间片将给你的客户带来粗鲁的无服务。
-    2. 强行断开正在执行的请求潜在破坏数据完整性。
-
-### 优雅重载 ???
+### 重载模式二：优雅停止实例，启动实例。
 ```shell
 Gracefully killing worker 2 (pid: 83388)...
 dealing with ongoing request...
@@ -34,16 +34,14 @@ spawned uWSGI worker 2 (pid: 9450, cores: 100)
 ...
 ```
 
-解决问题： 2.
+解决问题： 2。
 
-遗留问题： 1.
+遗留问题： 1。
 
 
-### 优雅重载：
-  
-    目标：重载期间请求无错误，无等待。
+### 重载模式三: 优雅重载。
     
-    难点：重载需要时间
+重载期间请求无错误，无等待。解决问题 1&2。
 
 
 ## uWSGI 重载
@@ -54,28 +52,28 @@ spawned uWSGI worker 2 (pid: 9450, cores: 100)
 ### 工作原理与理论背景
 
 
-uWSGI 提供两种启动应用程序的模式：Pre-fork（default）, Lazy-app
+uWSGI 提供两种启动应用程序的模式：Pre-fork(default), Lazy-app
 
 ![GitHub](./images/pre-fork.png)
 
-Pre-fork: uWSGI在第一个进程中加载整个应用，然后在加载完应用之后，会多次 fork() 自己。
+Pre-fork：uWSGI在第一个进程中加载整个应用，然后在加载完应用之后，多次 fork() 自己。
 
     优点: 更少的资源使用，更少的启动时间;
-    缺点: 每当你的修改代码时，该模式迫使你重载整个栈，而不是只重载worker。
+    缺点: 每当你的修改代码时，该模式迫使你重载整个栈，而不是只重载 worker。
 
-Lazy-app: 会对每个worker加载应用一次。
+Lazy-app: 对每个 worker 加载应用一次。
 
     优点: 运行在一个更加一致干净的环境中。
-    缺点: 将需要大约O(n)次加载 (其中，n是worker数)，非常有可能会消耗更多内存。
+    缺点: 将需要大约O(n)次加载 (其中，n 是 worker 数)，非常有可能会消耗更多内存。
 
-此外 Pre-fork and Lazy-app 代码部署上的区别（only workers or (master and workers)）.
+Pre-fork 和 Lazy-app 代码部署上的区别 (only workers or (master and workers)):
 
 ![GitHub](./images/worker-only-reload.png)
 
 
-#### Emperor mode（皇帝与封臣, 多实例）
+#### Emperor mode（皇帝与封臣, 多实例应用部署）
 
-它是一个负责启动/停止其他 uWSGI 进程（称为vassals）的小进程。
+它是一个负责启动/停止其他 uWSGI 进程（称为 vassals ）的小进程。
 通过简单的创建/删除 .ini 文件来创建/关闭应用。
 
 ![GitHub](./images/emperor-mode.png)
@@ -152,7 +150,7 @@ echo r > /tmp/yourfifo
 
 2. 等到所有 worker 都下线
    
-3. 重新执行本身 - 基本上，在同一进程中运行新代码
+3. 重新执行自身 - 基本上，在同一进程中运行新代码
    
 4. 生成新的 worker
 
@@ -168,7 +166,7 @@ master 是否重启: 是
 ![GitHub](./images/reload-w.png)
 
 重载流程:
-1. master会优雅的一次性关闭所有 worker
+1. master 会优雅的一次性关闭所有 worker
 
 2. 当一个 worker 关闭后，它会立即重新生成
    
@@ -214,7 +212,7 @@ master 是否重启: 是
 
 重载需要的时间：~ init + busy-worker-shutdown
 
-备注: 需要管理多实例，且该模式和 Emperor 不兼容
+需要启动多实例，且该模式和 Emperor 不兼容
 
 
 ### 5. Zerg dance
@@ -233,7 +231,7 @@ master 是否重启: 是
 
 master 是否重启: 是
 
-备注: 需要管理多实例，可用 Emperor 部署
+需要管理多实例，可用 Emperor 部署
 
 
 ### 总结
@@ -246,10 +244,17 @@ master 是否重启: 是
     
     内存重："f"/Zerg - 它们并排生成完整副本
     
-    不兼容 Emperor："f" - 不能让旧 master 重生
+    不兼容 Emperor："f" - 不能让旧 master 重新生成 worker
 
 
-## 测试使用脚本
+## 示例
+```shell
+1. 优雅关闭, 但有不可用时间
+2. 优雅重载之链式重启模式 (c 模式)
+3. 优雅重载之 zerg dance 模式
+```
+
+###  测试使用脚本
 
 ```python
 # -*- coding: utf8 -*-
@@ -260,12 +265,12 @@ from flask import Flask
 app = Flask(__name__)
 
 
-@app.route('/')
+@app.route('/v1/hello_world')
 def index():
     return 'Hello World'
 
 
-@app.route('/long_request')
+@app.route('/v1/long_request')
 def long_request():
     delayed_seconds = 10
     for i in range(delayed_seconds, 0, -1):
@@ -283,17 +288,116 @@ master-fifo    = .uwsgi.fifo
 processes      = 2
 enable_threads = true
 threads        = 10
-http           = :8008
+http-socket    = :8888
 chmod-socket   = 666
 wsgi-file      = server.py
 callable       = app
 ```
 
-启动服务器
+#### 1. 优雅关闭, 但有不可用时间。
+
+```shell
+# 启动服务器
+# $ cd uwsgi/demo
+$ uwsgi uwsgi.ini
+spawned uWSGI master process (pid: 28208)
+spawned uWSGI worker 1 (pid: 28209, cores: 10)
+spawned uWSGI worker 2 (pid: 28210, cores: 10)
+
+# 发送请求
+$ curl localhost:8888/v1/long_request
+
+# 发送重启信号
+$ echo r > .uwsgi.fifo
+...gracefully killing workers...
+Gracefully killing worker 1 (pid: 28209)...
+Gracefully killing worker 2 (pid: 28210)...
+...
+gracefully (RE)spawned uWSGI master process (pid: 28208)
+spawned uWSGI worker 1 (pid: 28374, cores: 10)
+spawned uWSGI worker 2 (pid: 28375, cores: 10)
 ```
+
+#### 2. 优雅重载之链式重启模式 (c 模式)
+```ini
+[uwsgi]
+lazy-apps      = true
+其他参数...
+```
+
+```shell
+# 启动服务器
 # cd uwsgi/demo
-uwsgi uwsgi.ini
+$ uwsgi uwsgi.ini
+spawned uWSGI master process (pid: 29741)
+spawned uWSGI worker 1 (pid: 29742, cores: 10)
+spawned uWSGI worker 2 (pid: 29743, cores: 10)
+
+# 发送请求
+$ curl localhost:8888/v1/long_request
+
+# 发送重启信号
+# cd uwsgi/demo
+$ echo c > .uwsgi.fifo
+chain reload starting...
+Gracefully killing worker 1 (pid: 29742)...
+worker 1 killed successfully (pid: 29742)
+Respawned uWSGI worker 1 (new pid: 29798)
+Gracefully killing worker 2 (pid: 29743)...
+worker 2 killed successfully (pid: 29743)
+Respawned uWSGI worker 2 (new pid: 29803)
+chain reloading complete
+...
 ```
+
+#### 3. 优雅重载之 zerg dance 模式
+
+```shell
+$ cd uwsgi/demo
+$ mkdir vassal
+```
+vassal.ini
+```ini
+[uwsgi]
+chdir          = /Users/vino/Workspace/dream/docs/uwsgi/demo
+processes      = 2
+enable_threads = true
+threads        = 10
+http-socket    = vassal/server.sock
+chmod-socket   = 666
+wsgi-file      = server.py
+callable       = app
+zerg            = vassal/zergpool
+stats           = %n.stats
+thunder-lock    = true
+
+hook-accepting1-once = write:vassal/%n.ready ok
+hook-as-user-atexit = unlink:vassal/%n.ready
+```
+
+vassal/zerg.ini
+```ini
+[uwsgi]
+chdir          = /Users/vino/Workspace/dream/docs/uwsgi/demo
+master         = true
+socket         = vassal/zergpool.sock
+chmod-socket   = 666
+zergpool       = vassal/zergpool:vassal/server.sock
+```
+
+###  运行 Emperor 多实例
+```shell
+# 启动 Emperor
+$ uwsgi --emperor vassal
+# 添加启动实例
+$ cp vassal.ini vassal/app1.ini
+# 再次添加实例
+$ cp vassal.ini vassal/app2.ini
+
+# 删除实例
+# rm vassal/app1.ini
+```
+
 
 ## 进程管理工具
 
