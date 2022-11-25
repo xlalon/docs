@@ -162,6 +162,8 @@ echo r > /tmp/yourfifo
 
 master 是否重启: 是
 
+讨论：对用户量小，实例重载时间短的服务比较友好。
+
 
 ### 2. restart workers ("w")
 
@@ -180,6 +182,8 @@ master 是否重启: 是
 
 master 是否重启: 否（和 pre-fork 模式不兼容）
 
+讨论：该模式和 "r" 模式对比并没有什么实质性的好处。
+
 
 ### 3. chain restart workers ("c")
 
@@ -196,6 +200,8 @@ master 是否重启: 否（和 pre-fork 模式不兼容）
 重载需要的时间：~ N x (busy-worker-shutdown + init)
 
 master 是否重启: 否（和 pre-fork 模式不兼容）
+
+讨论：0 停机时间，操作简单。如果 worker 数量较为科学，可以使用提高用户体验。
 
 
 ### 4. fork master ("f")
@@ -216,6 +222,8 @@ master 是否重启: 是
 
 需要启动多实例，且该模式和 Emperor 不兼容
 
+讨论：黑科技，需要较高的技能处理该模式带来的不一致问题。
+
 
 ### 5. Zerg dance
 
@@ -234,6 +242,8 @@ master 是否重启: 是
 master 是否重启: 是
 
 需要管理多实例，可用 Emperor 部署
+
+讨论：灰常给力，但也需要更高的脚本技能。
 
 
 ### 总结
@@ -402,6 +412,8 @@ $ cp vassal.ini vassal/app2.ini
 # 删除实例
 # $ rm vassal/app1.ini
 ```
+
+已知问题：删除实例是暴力删除，是否可以用脚本等改善？另外 Emperor 单点故障也需要考虑。
 
 
 ## 进程管理工具
