@@ -425,6 +425,15 @@ xxx: started
 
 ### 二. Systemd
 
+能较好的支持优雅重载
+
+```ini
+[Service]
+ExecStart=xxx
+ExecReload=xxx
+ExecStop=xxx
+```
+
 
 ## 参考文档
 
