@@ -6,14 +6,14 @@ from flask import Flask
 app = Flask(__name__)
 
 
-@app.route('/v1')
+@app.route('/')
 def index():
     return 'Hello World'
 
 
-@app.route('/v1/long_request')
+@app.route('/long_request')
 def long_request():
-    delayed_seconds = 10
+    delayed_seconds = 8
     for i in range(delayed_seconds, 0, -1):
         print('Please waiting for {} seconds.'.format(i))
         time.sleep(1)

@@ -41,7 +41,10 @@ spawned uWSGI worker 2 (pid: 9450, cores: 100)
 
 ### 重载模式三: 优雅重载。
     
-重载期间请求无错误，无等待。解决问题 1&2。
+目标: 重载期间请求无错误，无等待。解决问题 1&2。
+
+窍门: 不关闭映射到uWSGI守护进程地址的文件描述符，使用Unix的 fork() 行为 (默认继承文件描述符) 来再次 exec() uwsgi 二进制文件。
+
 
 
 ## uWSGI 重载
@@ -150,11 +153,10 @@ echo r > /tmp/yourfifo
 
 2. 等到所有 worker 都下线
    
-3. 重新执行自身 - 基本上，在同一进程中运行新代码
+3. 重新 exec 自身 - 基本上，在同一进程中运行新代码
    
 4. 生成新的 worker
 
-服务不可用时间：busy-worker-shutdown + init
 
 重载需要的时间：busy-worker-shutdown + init
 
@@ -248,11 +250,7 @@ master 是否重启: 是
 
 
 ## 示例
-```shell
-1. 优雅关闭, 但有不可用时间
-2. 优雅重载之链式重启模式 (c 模式)
-3. 优雅重载之 zerg dance 模式
-```
+
 
 ###  测试使用脚本
 
@@ -265,12 +263,12 @@ from flask import Flask
 app = Flask(__name__)
 
 
-@app.route('/v1/hello_world')
+@app.route('/')
 def index():
     return 'Hello World'
 
 
-@app.route('/v1/long_request')
+@app.route('/long_request')
 def long_request():
     delayed_seconds = 10
     for i in range(delayed_seconds, 0, -1):
@@ -288,13 +286,13 @@ master-fifo    = .uwsgi.fifo
 processes      = 2
 enable_threads = true
 threads        = 10
-http-socket    = :8888
+http-socket    = 127.0.0.1:8008
 chmod-socket   = 666
 wsgi-file      = server.py
 callable       = app
 ```
 
-#### 1. 优雅关闭, 但有不可用时间。
+#### 1. 标准的 (默认/无趣的) 的优雅重载 (又名 SIGHUP)。
 
 ```shell
 # 启动服务器
@@ -305,20 +303,23 @@ spawned uWSGI worker 1 (pid: 28209, cores: 10)
 spawned uWSGI worker 2 (pid: 28210, cores: 10)
 
 # 发送请求
-$ curl localhost:8888/v1/long_request
+$ curl localhost:8888/long_request
 
 # 发送重启信号
+# $ cd uwsgi/demo
 $ echo r > .uwsgi.fifo
 ...gracefully killing workers...
 Gracefully killing worker 1 (pid: 28209)...
 Gracefully killing worker 2 (pid: 28210)...
 ...
+binary reloading uWSGI...
+closing all non-uwsgi socket fds > 2 (max_fd = 10240)...
 gracefully (RE)spawned uWSGI master process (pid: 28208)
 spawned uWSGI worker 1 (pid: 28374, cores: 10)
 spawned uWSGI worker 2 (pid: 28375, cores: 10)
 ```
 
-#### 2. 优雅重载之链式重启模式 (c 模式)
+#### 2. 链式重启模式 (c 模式)
 ```ini
 [uwsgi]
 lazy-apps      = true
@@ -334,7 +335,7 @@ spawned uWSGI worker 1 (pid: 29742, cores: 10)
 spawned uWSGI worker 2 (pid: 29743, cores: 10)
 
 # 发送请求
-$ curl localhost:8888/v1/long_request
+$ curl localhost:8888/long_request
 
 # 发送重启信号
 # cd uwsgi/demo
@@ -350,7 +351,7 @@ chain reloading complete
 ...
 ```
 
-#### 3. 优雅重载之 zerg dance 模式
+#### 3. zerg dance 模式
 
 ```shell
 $ cd uwsgi/demo
@@ -391,11 +392,15 @@ zergpool       = vassal/zergpool:vassal/server.sock
 $ uwsgi --emperor vassal
 # 添加启动实例
 $ cp vassal.ini vassal/app1.ini
+
+# 发送请求
+$ curl localhost:8888/long_request
+
 # 再次添加实例
 $ cp vassal.ini vassal/app2.ini
 
 # 删除实例
-# rm vassal/app1.ini
+# $ rm vassal/app1.ini
 ```
 
 
